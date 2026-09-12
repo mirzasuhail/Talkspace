@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, ArrowUp, X, Image as ImageIcon, CornerUpLeft } from 'lucide-react';
+import { Plus, ArrowUp, X, Image as ImageIcon, CornerUpLeft, Camera, AlertCircle } from 'lucide-react';
 import { Message, UploadResponse } from '@talksy/shared';
 import { apiUploadImage } from '../../lib/api';
+import { CameraModal } from './CameraModal';
 
 export interface MessageComposerProps {
   roomSlug: string;
@@ -11,6 +12,15 @@ export interface MessageComposerProps {
   onSendMessage: (content: string, type: 'TEXT' | 'IMAGE', uploadIds?: string[], replyToId?: string) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
+}
+
+export interface ComposerAttachment {
+  tempId: string;
+  file: File;
+  previewUrl: string;
+  uploadState: 'uploading' | 'ready' | 'error';
+  uploadedId?: string;
+  errorMessage?: string;
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
@@ -23,12 +33,25 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onTypingStop,
 }) => {
   const [content, setContent] = useState('');
-  const [selectedUploads, setSelectedUploads] = useState<{ id: string; url: string; file: File }[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keep a ref of attachments to revoke object URLs on unmount
+  const attachmentsRef = useRef<ComposerAttachment[]>([]);
+  attachmentsRef.current = attachments;
+
+  useEffect(() => {
+    return () => {
+      attachmentsRef.current.forEach((att) => {
+        URL.revokeObjectURL(att.previewUrl);
+      });
+    };
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -37,9 +60,78 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
   }, [content]);
 
+  // Upload attachment asynchronously in background
+  const uploadAttachment = async (tempId: string, file: File) => {
+    try {
+      setAttachments((prev) =>
+        prev.map((att) => (att.tempId === tempId ? { ...att, uploadState: 'uploading', errorMessage: undefined } : att))
+      );
+
+      const uploadRes: UploadResponse = await apiUploadImage(file);
+
+      setAttachments((prev) =>
+        prev.map((att) =>
+          att.tempId === tempId
+            ? { ...att, uploadState: 'ready', uploadedId: uploadRes.id }
+            : att
+        )
+      );
+    } catch (err: any) {
+      console.warn('[Upload Error]', err);
+      setAttachments((prev) =>
+        prev.map((att) =>
+          att.tempId === tempId
+            ? { ...att, uploadState: 'error', errorMessage: err.message || 'Upload failed' }
+            : att
+        )
+      );
+    }
+  };
+
+  // Unified File Selection Handler (File Picker, Drag & Drop, Paste, Camera Capture)
+  const handleFileSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image size exceeds 10MB limit.');
+      return;
+    }
+
+    const tempId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const previewUrl = URL.createObjectURL(file);
+
+    const newAttachment: ComposerAttachment = {
+      tempId,
+      file,
+      previewUrl,
+      uploadState: 'uploading',
+    };
+
+    setAttachments((prev) => [...prev, newAttachment]);
+    uploadAttachment(tempId, file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    for (const f of files) {
+      handleFileSelect(f);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (tempId: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.tempId === tempId);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((a) => a.tempId !== tempId);
+    });
+  };
+
   // Clipboard paste handler
   useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
+    const handlePaste = (e: ClipboardEvent) => {
       if (!e.clipboardData) return;
       const items = Array.from(e.clipboardData.items);
       const imageItems = items.filter((item) => item.type.startsWith('image/'));
@@ -48,7 +140,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         e.preventDefault();
         for (const item of imageItems) {
           const file = item.getAsFile();
-          if (file) await handleFileSelect(file);
+          if (file) handleFileSelect(file);
         }
       }
     };
@@ -56,40 +148,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
-
-  const handleFileSelect = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Image size exceeds 10MB limit.');
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      const uploadRes: UploadResponse = await apiUploadImage(file);
-      setSelectedUploads((prev) => [
-        ...prev,
-        { id: uploadRes.id, url: uploadRes.thumbnailUrl || uploadRes.url, file },
-      ]);
-    } catch (err: any) {
-      alert(err.message || 'Could not upload image.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const files = Array.from(e.target.files);
-    for (const f of files) {
-      await handleFileSelect(f);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const removeUpload = (id: string) => {
-    setSelectedUploads((prev) => prev.filter((u) => u.id !== id));
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
@@ -112,8 +170,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     e.preventDefault();
     if (isMuted) return;
 
+    const isAnyUploading = attachments.some((a) => a.uploadState === 'uploading');
+    if (isAnyUploading) return;
+
+    const readyAttachments = attachments.filter((a) => a.uploadState === 'ready');
+    const uploadIds = readyAttachments.map((a) => a.uploadedId!).filter(Boolean);
     const trimmed = content.trim();
-    const uploadIds = selectedUploads.map((u) => u.id);
 
     if (!trimmed && uploadIds.length === 0) return;
 
@@ -121,8 +183,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
     onSendMessage(trimmed, messageType, uploadIds, replyToMessage?.id);
 
+    // Revoke object URLs for sent attachments
+    attachments.forEach((att) => URL.revokeObjectURL(att.previewUrl));
+
     setContent('');
-    setSelectedUploads([]);
+    setAttachments([]);
     if (onCancelReply) onCancelReply();
     onTypingStop();
 
@@ -142,13 +207,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     setIsDraggingOver(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
     if (!e.dataTransfer.files) return;
     const files = Array.from(e.dataTransfer.files);
     for (const f of files) {
-      await handleFileSelect(f);
+      handleFileSelect(f);
     }
   };
 
@@ -162,7 +227,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     );
   }
 
-  const isDisabled = !content.trim() && selectedUploads.length === 0;
+  const isAnyUploading = attachments.some((a) => a.uploadState === 'uploading');
+  const hasReadyUploads = attachments.some((a) => a.uploadState === 'ready');
+  const hasContent = Boolean(content.trim());
+
+  const isDisabled = isAnyUploading || (!hasContent && !hasReadyUploads);
 
   return (
     <div
@@ -191,6 +260,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         className="hidden"
       />
 
+      {/* Camera Capture Modal */}
+      <CameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleFileSelect}
+      />
+
       <div className="w-full max-w-4xl mx-auto px-3 sm:px-6">
         {/* Reply Quote Banner */}
         {replyToMessage && (
@@ -210,42 +286,76 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           </div>
         )}
 
-        {/* Image Preview Tray */}
-        {selectedUploads.length > 0 && (
+        {/* Image Preview Tray (Instant Local Blob Previews) */}
+        {attachments.length > 0 && (
           <div className="flex items-center gap-2 mb-2 overflow-x-auto no-scrollbar py-0.5">
-            {selectedUploads.map((up) => (
+            {attachments.map((att) => (
               <div
-                key={up.id}
-                className="relative shrink-0 w-[56px] h-[56px] rounded-xl overflow-hidden border border-border bg-surface shadow-sm"
+                key={att.tempId}
+                className="relative shrink-0 w-[58px] h-[58px] rounded-xl overflow-hidden border border-border bg-surface shadow-sm group/att"
               >
-                <img src={up.url} alt="Preview" className="w-full h-full object-cover" />
+                {/* Instant Local Image Preview */}
+                <img src={att.previewUrl} alt="Preview" className="w-full h-full object-cover" />
+
+                {/* Uploading Overlay Spinner */}
+                {att.uploadState === 'uploading' && (
+                  <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] flex items-center justify-center">
+                    <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  </div>
+                )}
+
+                {/* Upload Failure Overlay */}
+                {att.uploadState === 'error' && (
+                  <div className="absolute inset-0 bg-rose-950/85 backdrop-blur-[1px] flex flex-col items-center justify-center p-1 text-center">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 mb-0.5" />
+                    <button
+                      type="button"
+                      onClick={() => uploadAttachment(att.tempId, att.file)}
+                      className="text-[9px] font-bold text-white underline hover:text-rose-200"
+                      title="Retry upload"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {/* Remove Attachment Button */}
                 <button
-                  onClick={() => removeUpload(up.id)}
-                  className="absolute top-1 right-1 p-1 rounded-full bg-black/75 text-white hover:bg-rose-600 transition-colors shadow-sm"
+                  type="button"
+                  onClick={() => removeAttachment(att.tempId)}
+                  className="absolute top-1 right-1 p-0.5 rounded-full bg-black/75 text-white hover:bg-rose-600 transition-colors shadow-sm z-10"
+                  title="Remove image"
+                  aria-label="Remove image"
                 >
                   <X className="w-3 h-3" />
                 </button>
               </div>
             ))}
-            {isUploading && (
-              <div className="w-[56px] h-[56px] rounded-xl border border-border bg-surface flex items-center justify-center shrink-0">
-                <div className="w-4 h-4 rounded-full border-2 border-border border-t-violet-500 animate-spin" />
-              </div>
-            )}
           </div>
         )}
 
-        {/* Snapchat-Style Composer Row [ + ] [ Input ] [ ↑ ] */}
+        {/* Snapchat-Style Composer Row [ + ] [ 📷 ] [ Input ] [ ↑ ] */}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          {/* Attachment Button [ + ] */}
+          {/* File Picker Button [ + ] */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="p-2.5 shrink-0 rounded-2xl bg-surface/80 hover:bg-surface-hover border border-border/80 text-muted hover:text-foreground transition-all active:scale-95 flex items-center justify-center min-w-[44px] min-h-[44px]"
-            title="Attach image"
-            aria-label="Attach image"
+            title="Attach image file"
+            aria-label="Attach image file"
           >
             <Plus className="w-5 h-5 stroke-[2.5]" />
+          </button>
+
+          {/* Camera Button [ 📷 ] */}
+          <button
+            type="button"
+            onClick={() => setIsCameraOpen(true)}
+            className="p-2.5 shrink-0 rounded-2xl bg-surface/80 hover:bg-surface-hover border border-border/80 text-muted hover:text-foreground transition-all active:scale-95 flex items-center justify-center min-w-[44px] min-h-[44px]"
+            title="Take photo with camera"
+            aria-label="Take photo with camera"
+          >
+            <Camera className="w-5 h-5 stroke-[2]" />
           </button>
 
           {/* Text Area Input */}
@@ -277,4 +387,3 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     </div>
   );
 };
-
