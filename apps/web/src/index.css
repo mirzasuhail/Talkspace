@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ============================================
+     TALKSPACE DESIGN SYSTEM — LOVABLE & VERCEL THEME
+     Visual polish + Stripe typography + Atmospheric depth
+     ============================================ */
+
+  /* Dark Theme — Deep charcoal neutral (#0A0A0E) with indigo/violet atmosphere */
+  :root,
+  .dark {
+    color-scheme: dark;
+    --color-bg: #0A0A0E;
+    --color-fg: #F1F1F5;
+    --color-surface: #12121A;
+    --color-surface-elevated: rgba(23, 23, 34, 0.85);
+    --color-surface-hover: #1E1E2C;
+    --color-border: rgba(255, 255, 255, 0.10);
+    --color-border-hover: rgba(255, 255, 255, 0.20);
+    --color-text-muted: rgba(255, 255, 255, 0.55);
+
+    /* Vibrant Violet / Lavender Accent */
+    --color-primary: #8B7CFF;
+    --color-primary-hover: #7968FF;
+    --color-primary-light: #A396FF;
+
+    /* Control surface highlight glow */
+    --surface-glow: rgba(139, 124, 255, 0.15);
+
+    /* Message tint */
+    --color-own-msg-bg: rgba(139, 124, 255, 0.08);
+    --color-own-msg-border: rgba(139, 124, 255, 0.14);
+  }
+
+  /* Light Theme — Soft warm white neutral (#FAFAF8) */
+  .light {
+    color-scheme: light;
+    --color-bg: #FAFAF8;
+    --color-fg: #111116;
+    --color-surface: #EFEEEA;
+    --color-surface-elevated: rgba(255, 255, 255, 0.90);
+    --color-surface-hover: #E3E2DC;
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-hover: rgba(0, 0, 0, 0.16);
+    --color-text-muted: rgba(0, 0, 0, 0.52);
+
+    /* Soft Violet / Lavender Accent */
+    --color-primary: #7C66FF;
+    --color-primary-hover: #6952FF;
+    --color-primary-light: #9482FF;
+
+    /* Control surface highlight glow */
+    --surface-glow: rgba(124, 102, 255, 0.12);
+
+    /* Message tint */
+    --color-own-msg-bg: rgba(124, 102, 255, 0.06);
+    --color-own-msg-border: rgba(124, 102, 255, 0.12);
+  }
+
+  /* ---- Layout Tokens ---- */
+  :root {
+    --chat-content-width: 960px;
+    --header-height: 56px;
+    --composer-min-height: 56px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+}
+
+/* ---- Custom scrollbar ---- */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.4);
+}
+
+/* ---- Hide scrollbar utility ---- */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ---- Chat content width utility ---- */
+.chat-content {
+  width: min(100% - 32px, var(--chat-content-width));
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .chat-content {
+    width: min(100% - 48px, var(--chat-content-width));
+  }
+}
+
+/* ---- Soft Drifting Atmosphere Animations ---- */
+@keyframes softDrift1 {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(45px, -35px) scale(1.1); }
+  66% { transform: translate(-30px, 40px) scale(0.95); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes softDrift2 {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(-40px, 30px) scale(1.08); }
+  66% { transform: translate(35px, -40px) scale(0.92); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes softDrift3 {
+  0% { transform: translate(0px, 0px) scale(1); }
+  50% { transform: translate(30px, 35px) scale(1.12); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-soft-drift-1 {
+  animation: softDrift1 30s infinite ease-in-out;
+}
+
+.animate-soft-drift-2 {
+  animation: softDrift2 36s infinite ease-in-out;
+}
+
+.animate-soft-drift-3 {
+  animation: softDrift3 42s infinite ease-in-out;
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .animate-soft-drift-1,
+  .animate-soft-drift-2,
+  .animate-soft-drift-3 {
+    animation: none !important;
+  }
+}
+

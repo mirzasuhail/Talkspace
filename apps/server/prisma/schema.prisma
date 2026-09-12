@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id               String       @id @default(uuid())
+  slug             String       @unique
+  name             String
+  description      String?
+  visibility       String       @default("PUBLIC")
+  passwordHash     String?
+  ownerSessionId   String
+  expiresAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  messages         Message[]
+  bans             Ban[]
+  reports          Report[]
+
+  @@index([slug])
+  @@index([expiresAt])
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  nickname      String
+  avatarSeed    String
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+
+  messages      Message[]
+  reactions     Reaction[]
+  reports       Report[]
+}
+
+model Message {
+  id            String       @id @default(uuid())
+  roomId        String
+  sessionId     String
+  type          String       @default("TEXT")
+  content       String
+  replyToId     String?
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  room          Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  session       Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replyTo       Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies       Message[]    @relation("MessageReplies")
+  uploads       Upload[]
+  reactions     Reaction[]
+  reports       Report[]
+
+  @@index([roomId, createdAt])
+}
+
+model Upload {
+  id           String   @id @default(uuid())
+  messageId    String?
+  storageKey   String
+  thumbnailKey String
+  mimeType     String
+  size         Int
+  width        Int
+  height       Int
+  createdAt    DateTime @default(now())
+
+  message      Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  sessionId String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, sessionId, emoji])
+}
+
+model Ban {
+  id            String    @id @default(uuid())
+  roomId        String
+  sessionIdHash String
+  reason        String?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  room          Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, sessionIdHash])
+}
+
+model Report {
+  id                String   @id @default(uuid())
+  roomId            String
+  messageId         String
+  reporterSessionId String
+  reason            String
+  createdAt         DateTime @default(now())
+
+  room              Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  message           Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporter          Session  @relation(fields: [reporterSessionId], references: [id], onDelete: Cascade)
+}
