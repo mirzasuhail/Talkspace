@@ -20,6 +20,8 @@
     "@fastify/static": "^7.0.4",
     "@prisma/client": "^5.22.0",
     "@talksy/shared": "*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/sanitize-html": "^2.13.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
@@ -30,12 +32,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.9",
-    "@types/sanitize-html": "^2.13.0",
     "prisma": "^5.22.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.3"
   }
 }
+

@@ -7,5 +7,7 @@
     "outDir": "./dist",
     "noEmit": false
   },
-  "include": ["src/**/*", "prisma/**/*"]
+  "include": ["src/**/*", "prisma/**/*"],
+  "exclude": ["src/__tests__/**/*", "**/*.test.ts", "**/*.spec.ts"]
 }
+
