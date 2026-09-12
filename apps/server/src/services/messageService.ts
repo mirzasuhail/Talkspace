@@ -60,8 +60,9 @@ export class MessageService {
         size: u.size,
         width: u.width,
         height: u.height,
-        url: `${publicBase}/${u.storageKey}`,
-        thumbnailUrl: `${publicBase}/thumbnails/${u.thumbnailKey}`,
+        url: `/api/uploads/files?key=${encodeURIComponent(u.storageKey)}`,
+        thumbnailUrl: `/api/uploads/files?key=${encodeURIComponent(u.thumbnailKey)}`,
+
         createdAt: u.createdAt.toISOString(),
       }));
 
@@ -164,8 +165,9 @@ export class MessageService {
         size: u.size,
         width: u.width,
         height: u.height,
-        url: `${publicBase}/${u.storageKey}`,
-        thumbnailUrl: `${publicBase}/thumbnails/${u.thumbnailKey}`,
+        url: `/api/uploads/files?key=${encodeURIComponent(u.storageKey)}`,
+        thumbnailUrl: `/api/uploads/files?key=${encodeURIComponent(u.thumbnailKey)}`,
+
         createdAt: u.createdAt.toISOString(),
       })),
       reactions: [],

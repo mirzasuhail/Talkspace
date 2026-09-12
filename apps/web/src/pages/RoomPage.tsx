@@ -11,7 +11,8 @@ import { Toast } from '../components/ui/Toast';
 import { useSession } from '../hooks/useSession';
 import { useSocket } from '../hooks/useSocket';
 import { useVisualViewport } from '../hooks/useVisualViewport';
-import { apiGetRoomInfo, apiGetMessages, apiReportMessage } from '../lib/api';
+import { apiGetRoomInfo, apiGetMessages, apiReportMessage, getMediaUrl } from '../lib/api';
+
 import { Message } from '@talksy/shared';
 import { Share2, Check, ArrowDown } from 'lucide-react';
 
@@ -201,11 +202,12 @@ export const RoomPage: React.FC = () => {
     .filter((m) => !m.deletedAt)
     .flatMap((m) =>
       (m.uploads || []).map((u) => ({
-        url: u.url,
+        url: getMediaUrl(u.url),
         senderNickname: m.senderNickname,
         timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }))
     );
+
 
   const currentLightboxIndex = allImagesInRoom.findIndex((img) => img.url === lightboxState.currentUrl);
 

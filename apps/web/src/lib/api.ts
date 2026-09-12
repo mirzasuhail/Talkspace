@@ -2,6 +2,22 @@ import { CreateRoomDTO, RoomInfoResponse, UploadResponse, Message } from '@talks
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+export function getMediaUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return '';
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://') || pathOrUrl.startsWith('blob:')) {
+    return pathOrUrl;
+  }
+
+  if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+    const origin = API_BASE.replace(/\/api\/?$/, '');
+    const cleanPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+    return `${origin}${cleanPath}`;
+  }
+
+  return pathOrUrl;
+}
+
+
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     headers: {

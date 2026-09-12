@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Message } from '@talksy/shared';
 import { generateAvatarSvg } from '../../lib/avatar';
+import { getMediaUrl } from '../../lib/api';
 import { format } from 'date-fns';
+
 import { Smile, Trash2, Edit3, Flag, Check, CornerUpLeft, X } from 'lucide-react';
 
 export interface MessageItemProps {
@@ -239,12 +241,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                       className="relative overflow-hidden rounded-2xl border border-white/10 dark:border-white/10 shadow-md bg-surface group/img"
                     >
                       <img
-                        src={img.thumbnailUrl || img.url}
+                        src={getMediaUrl(img.thumbnailUrl || img.url)}
                         alt="Attachment"
                         loading="lazy"
                         className="w-auto h-auto max-h-[360px] sm:max-h-[440px] max-w-[82vw] sm:max-w-[460px] object-cover cursor-pointer hover:scale-[1.01] transition-transform duration-200"
-                        onClick={() => onImageClick && onImageClick(img.url)}
+                        onClick={() => onImageClick && onImageClick(getMediaUrl(img.url))}
                       />
+
                     </div>
                   ))}
                 </div>
