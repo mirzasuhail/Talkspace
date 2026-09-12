@@ -9,105 +9,144 @@ interface CameraModalProps {
 
 export const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const stopStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+  // Helper to stop all tracks of a stream
+  const stopTracks = (mediaStream: MediaStream | null) => {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
     }
   };
 
-  const startCamera = async () => {
-    setLoading(true);
-    setError(null);
-    stopStream();
-
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera is not supported on this browser or environment.');
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setLoading(false);
-    } catch (err: any) {
-      console.warn('[Camera Access Error]', err);
-      let msg = 'Could not access camera.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        msg = 'Camera permission was denied. Please grant camera permissions in your browser.';
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        msg = 'No camera device found on this device.';
-      } else if (err.message) {
-        msg = err.message;
-      }
-      setError(msg);
-      setLoading(false);
-    }
-  };
-
+  // 1. Initialize camera stream when isOpen becomes true
   useEffect(() => {
+    let isCancelled = false;
+
+    const startCamera = async () => {
+      if (!isOpen) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Camera access is not supported on this browser or environment.');
+        }
+
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+
+        if (isCancelled) {
+          stopTracks(mediaStream);
+          return;
+        }
+
+        setStream(mediaStream);
+        setLoading(false);
+      } catch (err: any) {
+        if (isCancelled) return;
+        console.warn('[Camera Access Error]', err);
+
+        let msg = 'Could not access camera.';
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          msg = 'Camera permission was denied. Please allow camera access in your browser settings.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          msg = 'No camera device found.';
+        } else if (err.message) {
+          msg = err.message;
+        }
+
+        setError(msg);
+        setLoading(false);
+      }
+    };
+
     if (isOpen) {
       startCamera();
     } else {
-      stopStream();
+      setStream((prevStream) => {
+        stopTracks(prevStream);
+        return null;
+      });
+      setError(null);
+      setLoading(false);
     }
 
     return () => {
-      stopStream();
+      isCancelled = true;
+      setStream((prevStream) => {
+        stopTracks(prevStream);
+        return null;
+      });
     };
   }, [isOpen]);
+
+  // 2. Attach stream to <video> as soon as stream and videoRef.current are ready
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      const video = videoRef.current;
+      video.srcObject = stream;
+      video.play().catch((playErr) => {
+        console.warn('[Camera Video Play Warning]', playErr);
+      });
+    }
+  }, [stream]);
 
   if (!isOpen) return null;
 
   const handleCapture = () => {
-    if (!videoRef.current || !streamRef.current) return;
+    if (!videoRef.current || !stream) return;
     const video = videoRef.current;
-    if (!video.videoWidth || !video.videoHeight) return;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = width;
+    canvas.height = height;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, width, height);
 
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const capturedFile = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        stopStream();
-        onCapture(capturedFile);
-        onClose();
-      }
-    }, 'image/jpeg', 0.9);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+          // Stop tracks and close modal
+          stopTracks(stream);
+          setStream(null);
+          onCapture(file);
+          onClose();
+        }
+      },
+      'image/jpeg',
+      0.9
+    );
   };
 
   const handleClose = () => {
-    stopStream();
+    stopTracks(stream);
+    setStream(null);
     onClose();
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/95 text-white animate-fade-in p-4 sm:p-6"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/95 text-white animate-fade-in p-4 sm:p-6 select-none"
       role="dialog"
       aria-label="Camera Capture"
     >
-      {/* Top Header */}
+      {/* Top Bar */}
       <div className="w-full flex items-center justify-between z-20">
         <span className="text-sm font-semibold tracking-wide text-white/80">Camera</span>
         <button
+          type="button"
           onClick={handleClose}
           className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
           title="Close Camera"
@@ -116,21 +155,35 @@ export const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCap
         </button>
       </div>
 
-      {/* Main Stream Container */}
+      {/* Main Camera Preview Container */}
       <div className="relative flex-1 w-full max-w-lg my-4 rounded-3xl overflow-hidden bg-zinc-900 border border-white/10 flex items-center justify-center">
         {loading && (
           <div className="flex flex-col items-center gap-3 text-white/60">
             <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-violet-500 animate-spin" />
-            <span className="text-xs">Starting camera...</span>
+            <span className="text-xs font-medium">Starting camera...</span>
           </div>
         )}
 
         {error ? (
-          <div className="flex flex-col items-center text-center p-6 max-w-xs">
+          <div className="flex flex-col items-center text-center p-6 max-w-xs z-10">
             <AlertCircle className="w-10 h-10 text-rose-500 mb-3" />
             <p className="text-sm font-medium text-white/90 mb-4">{error}</p>
             <button
-              onClick={startCamera}
+              type="button"
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                navigator.mediaDevices
+                  ?.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+                  .then((s) => {
+                    setStream(s);
+                    setLoading(false);
+                  })
+                  .catch((err) => {
+                    setError(err.message || 'Camera error.');
+                    setLoading(false);
+                  });
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -140,22 +193,28 @@ export const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCap
         ) : (
           <video
             ref={videoRef}
-            playsInline
             autoPlay
+            playsInline
             muted
             className={`w-full h-full object-cover transition-opacity duration-300 ${
-              loading ? 'opacity-0' : 'opacity-100'
+              stream && !loading ? 'opacity-100' : 'opacity-0'
             }`}
           />
         )}
       </div>
 
-      {/* Bottom Controls */}
+      {/* Bottom Capture Button */}
       <div className="w-full flex items-center justify-center pb-2 z-20">
-        {!error && !loading && (
+        {!error && (
           <button
+            type="button"
             onClick={handleCapture}
-            className="w-16 h-16 rounded-full border-4 border-white bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all shadow-xl shadow-violet-600/30 flex items-center justify-center"
+            disabled={!stream || loading}
+            className={`w-16 h-16 rounded-full border-4 border-white transition-all shadow-xl flex items-center justify-center ${
+              !stream || loading
+                ? 'bg-zinc-700 opacity-50 cursor-not-allowed'
+                : 'bg-violet-600 hover:bg-violet-500 active:scale-95 shadow-violet-600/40'
+            }`}
             title="Take Photo"
             aria-label="Take Photo"
           >
