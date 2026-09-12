@@ -1,4 +1,4 @@
-import { Message, RoomMember } from './models';
+import { Message, RoomMember } from './models.js';
 
 export const SOCKET_EVENTS = {
   // Client -> Server

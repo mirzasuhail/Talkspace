@@ -1,4 +1,4 @@
-import { RoomExpiration, RoomVisibility } from './models';
+import { RoomExpiration, RoomVisibility } from './models.js';
 
 export interface CreateRoomDTO {
   name: string;
