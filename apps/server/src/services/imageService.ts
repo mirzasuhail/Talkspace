@@ -1,19 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import sharp from 'sharp';
-import { CONFIG } from '../config';
 import { prisma } from '../lib/prisma';
+import { StorageService } from './storageService';
 import { UploadResponse } from '@talksy/shared';
 
 export class ImageService {
-  private static ensureUploadDirs() {
-    const mainDir = CONFIG.UPLOAD_DIR;
-    const thumbDir = path.join(CONFIG.UPLOAD_DIR, 'thumbnails');
-    if (!fs.existsSync(mainDir)) fs.mkdirSync(mainDir, { recursive: true });
-    if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true });
-  }
-
   static validateMagicNumber(buffer: Buffer): { isValid: boolean; mimeType: string } {
     if (buffer.length < 4) return { isValid: false, mimeType: '' };
 
@@ -47,24 +38,20 @@ export class ImageService {
     return { isValid: false, mimeType: '' };
   }
 
-  static async processAndStore(fileBuffer: Buffer): Promise<UploadResponse> {
-    this.ensureUploadDirs();
-
+  static async processAndStore(fileBuffer: Buffer, roomId?: string): Promise<UploadResponse> {
     // 1. Validate magic bytes
     const validation = this.validateMagicNumber(fileBuffer);
     if (!validation.isValid) {
       throw new Error('Unsupported image format. Allowed: JPEG, PNG, WebP, GIF.');
     }
 
-    // 2. Generate unique filename keys
-    const hash = crypto.randomBytes(16).toString('hex');
-    const mainFileName = `${hash}.webp`;
-    const thumbFileName = `${hash}_thumb.webp`;
+    // 2. Generate unique storage object keys (e.g. rooms/{roomId}/images/{uuid}.webp)
+    const uuid = crypto.randomUUID();
+    const folder = roomId ? `rooms/${roomId}` : `uploads`;
+    const mainStorageKey = `${folder}/images/${uuid}.webp`;
+    const thumbStorageKey = `${folder}/thumbnails/${uuid}_thumb.webp`;
 
-    const mainFilePath = path.join(CONFIG.UPLOAD_DIR, mainFileName);
-    const thumbFilePath = path.join(CONFIG.UPLOAD_DIR, 'thumbnails', thumbFileName);
-
-    // 3. Process main image with sharp (strip EXIF, convert to WebP, resize if extremely large > 2560px)
+    // 3. Process main image with sharp (strip EXIF, convert to WebP, resize if > 2560px)
     const pipeline = sharp(fileBuffer);
     const metadata = await pipeline.metadata();
 
@@ -81,7 +68,6 @@ export class ImageService {
     }
 
     const processedBuffer = await processedPipeline.webp({ quality: 82 }).toBuffer();
-    await fs.promises.writeFile(mainFilePath, processedBuffer);
 
     // 4. Generate thumbnail (max 400px width/height)
     const thumbBuffer = await sharp(fileBuffer)
@@ -90,13 +76,15 @@ export class ImageService {
       .webp({ quality: 75 })
       .toBuffer();
 
-    await fs.promises.writeFile(thumbFilePath, thumbBuffer);
+    // 5. Upload to Supabase Storage (or local dev fallback)
+    await StorageService.uploadBuffer(mainStorageKey, processedBuffer, 'image/webp');
+    await StorageService.uploadBuffer(thumbStorageKey, thumbBuffer, 'image/webp');
 
-    // 5. Store metadata record in Database
+    // 6. Store metadata record in Database
     const uploadRecord = await prisma.upload.create({
       data: {
-        storageKey: mainFileName,
-        thumbnailKey: thumbFileName,
+        storageKey: mainStorageKey,
+        thumbnailKey: thumbStorageKey,
         mimeType: 'image/webp',
         size: processedBuffer.length,
         width: originalWidth,
@@ -104,7 +92,7 @@ export class ImageService {
       },
     });
 
-    const publicBase = `/api/uploads`;
+    const publicBase = `/api/uploads/files`;
 
     return {
       id: uploadRecord.id,
@@ -114,8 +102,8 @@ export class ImageService {
       size: uploadRecord.size,
       width: uploadRecord.width,
       height: uploadRecord.height,
-      url: `${publicBase}/${uploadRecord.storageKey}`,
-      thumbnailUrl: `${publicBase}/thumbnails/${uploadRecord.thumbnailKey}`,
+      url: `${publicBase}?key=${encodeURIComponent(uploadRecord.storageKey)}`,
+      thumbnailUrl: `${publicBase}?key=${encodeURIComponent(uploadRecord.thumbnailKey)}`,
     };
   }
 }

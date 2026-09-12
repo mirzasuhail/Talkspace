@@ -6,6 +6,8 @@ import { redisClient } from '../lib/redis';
 import { CONFIG } from '../config';
 import { slugify, sanitizeText } from '../middleware/sanitizer';
 import { CreateRoomDTO, RoomExpiration } from '@talksy/shared';
+import { StorageService } from './storageService';
+
 
 export class RoomService {
   private static calculateExpiresAt(expiration?: RoomExpiration): Date | null {
@@ -102,26 +104,28 @@ export class RoomService {
   }
 
   static async destroyRoomCascade(roomId: string, slug: string) {
+
     console.log(`[Talksy Lifecycle] Destroying empty room #${slug} (${roomId})...`);
 
-    // 1. Find all associated upload file keys to clean up from disk
-    const messages = await prisma.message.findMany({
-      where: { roomId },
-      include: { uploads: true },
-    });
+    // 1. Delete all associated storage objects for this room from Supabase Storage / storage service
+    try {
+      const messages = await prisma.message.findMany({
+        where: { roomId },
+        include: { uploads: true },
+      });
 
-    for (const m of messages) {
-      for (const u of m.uploads) {
-        try {
-          const mainPath = path.join(CONFIG.UPLOAD_DIR, u.storageKey);
-          const thumbPath = path.join(CONFIG.UPLOAD_DIR, 'thumbnails', u.thumbnailKey);
-          if (fs.existsSync(mainPath)) fs.unlinkSync(mainPath);
-          if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
-        } catch (err: any) {
-          console.warn(`[File Delete Warning] Could not remove file ${u.storageKey}:`, err.message);
+      for (const m of messages) {
+        for (const u of m.uploads) {
+          await StorageService.deleteFile(u.storageKey);
+          await StorageService.deleteFile(u.thumbnailKey);
         }
       }
+
+      await StorageService.deleteFilesForRoom(roomId);
+    } catch (err: any) {
+      console.warn(`[Storage Purge Warning] Could not purge storage objects for room ${roomId}:`, err.message);
     }
+
 
     // 2. Cascade delete room from DB (Prisma cascade deletes messages, reactions, uploads, bans, reports)
     try {

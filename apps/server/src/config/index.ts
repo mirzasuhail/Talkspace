@@ -17,5 +17,9 @@ export const CONFIG = {
   PUBLIC_WEB_URL: process.env.PUBLIC_WEB_URL || 'http://localhost:3000',
   SESSION_SECRET: process.env.SESSION_SECRET || 'talkspace-production-secret-key-change-me',
   ALLOWED_IMAGE_MIMES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  SUPABASE_URL: process.env.SUPABASE_URL || '',
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET || 'talkspace-images',
 };
+
 

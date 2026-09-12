@@ -2,6 +2,8 @@ import { prisma } from '../lib/prisma';
 import { sanitizeMarkdown } from '../middleware/sanitizer';
 import { Message, MessageType, ReactionSummary } from '@talksy/shared';
 import { CONFIG } from '../config';
+import { StorageService } from './storageService';
+
 
 export class MessageService {
   static async getRoomMessages(roomId: string, limit: number = 100, currentSessionId?: string): Promise<Message[]> {
@@ -239,11 +241,27 @@ export class MessageService {
   }
 
   static async deleteMessage(messageId: string, sessionId: string, isOwner: boolean = false) {
-    const msg = await prisma.message.findUnique({ where: { id: messageId } });
+
+    const msg = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: { uploads: true },
+    });
     if (!msg) throw new Error('Message not found');
 
     if (!isOwner && msg.sessionId !== sessionId) {
       throw new Error('Unauthorized to delete message');
+    }
+
+    // Delete associated storage objects from Supabase Storage
+    if (msg.uploads && msg.uploads.length > 0) {
+      for (const u of msg.uploads) {
+        try {
+          await StorageService.deleteFile(u.storageKey);
+          await StorageService.deleteFile(u.thumbnailKey);
+        } catch (err: any) {
+          console.warn(`[Storage Delete Warning] Could not delete storage object ${u.storageKey}:`, err.message);
+        }
+      }
     }
 
     const updated = await prisma.message.update({
@@ -254,3 +272,4 @@ export class MessageService {
     return updated;
   }
 }
+

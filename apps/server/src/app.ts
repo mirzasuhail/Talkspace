@@ -4,6 +4,8 @@ import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
+import fs from 'fs';
+
 import { CONFIG } from './config';
 import { RoomController } from './controllers/roomController';
 import { SessionController } from './controllers/sessionController';
@@ -38,11 +40,13 @@ export function buildApp(): FastifyInstance {
     },
   });
 
-  // Static directory for uploaded files
-  app.register(fastifyStatic, {
-    root: CONFIG.UPLOAD_DIR,
-    prefix: '/api/uploads/files/',
-  });
+  // Static directory for uploaded files (only if local UPLOAD_DIR exists)
+  if (fs.existsSync(CONFIG.UPLOAD_DIR)) {
+    app.register(fastifyStatic, {
+      root: CONFIG.UPLOAD_DIR,
+      prefix: '/api/uploads/local/',
+    });
+  }
 
   // Health check endpoint
   app.get('/api/health', async () => {
@@ -59,8 +63,10 @@ export function buildApp(): FastifyInstance {
   app.patch('/api/sessions/:id/nickname', SessionController.updateNickname);
 
   app.post('/api/uploads', UploadController.uploadImage);
+  app.get('/api/uploads/files', UploadController.serveFile);
   app.get('/api/uploads/thumbnails/:thumbKey', UploadController.serveThumbnail);
   app.get('/api/uploads/:fileKey', UploadController.serveFile);
+
 
   app.get('/api/rooms/:slug/messages', MessageController.getRoomMessages);
   app.post('/api/messages/:messageId/report', MessageController.reportMessage);
